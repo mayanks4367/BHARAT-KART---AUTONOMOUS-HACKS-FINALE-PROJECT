@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { Mail, Lock, Eye, EyeOff, ArrowRight, ShoppingBag, Sparkles, User, CheckCircle } from "lucide-react"
+import { Mail, Lock, Eye, EyeOff, ArrowRight, ShoppingBag, Sparkles, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 
@@ -18,7 +18,6 @@ export default function RegisterPage() {
     const [showPassword, setShowPassword] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState("")
-    const [success, setSuccess] = useState(false)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -42,41 +41,9 @@ export default function RegisterPage() {
             setError(authError.message)
             setIsLoading(false)
         } else {
-            setSuccess(true)
+            // Firebase signs in the user immediately after registration
+            router.push("/")
         }
-    }
-
-    if (success) {
-        return (
-            <main className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-yellow-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950 flex items-center justify-center py-12 px-4">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 text-center max-w-md"
-                >
-                    <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ delay: 0.2, type: "spring" }}
-                        className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6"
-                    >
-                        <CheckCircle className="w-10 h-10 text-green-500" />
-                    </motion.div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                        Check Your Email!
-                    </h1>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                        We've sent a confirmation link to <strong>{email}</strong>. Please check your inbox and click the link to activate your account.
-                    </p>
-                    <Link href="/auth/login">
-                        <Button className="bg-orange-500 hover:bg-orange-600 gap-2">
-                            Go to Login
-                            <ArrowRight className="w-4 h-4" />
-                        </Button>
-                    </Link>
-                </motion.div>
-            </main>
-        )
     }
 
     return (

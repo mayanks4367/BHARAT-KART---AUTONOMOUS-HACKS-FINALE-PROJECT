@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         
         console.log("Audio converted to Base64, length:", audioBase64.length)
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
 
         const prompt = `You are assisting an Indian artisan in creating a product listing for their handcrafted item.
 

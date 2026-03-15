@@ -1,10 +1,18 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { createClient } from "./supabase"
-import { User } from "@supabase/supabase-js"
+import { 
+    onAuthStateChanged,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signInWithPopup,
+    GoogleAuthProvider,
+    signOut as firebaseSignOut,
+    updateProfile,
+    User as FirebaseUser
+} from "firebase/auth"
+import { auth } from "./firebase"
 
-// We are adapting Profile interface to avoid massive rewrite of the existing codebase
 export interface Profile {
     id: string
     full_name: string | null
@@ -13,8 +21,11 @@ export interface Profile {
     created_at: string
 }
 
+// Extend FirebaseUser with an `id` alias for `uid` to match existing codebase usage
+type AuthUser = FirebaseUser & { id: string }
+
 interface AuthContextType {
-    user: User | null
+    user: AuthUser | null
     profile: Profile | null
     loading: boolean
     signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>
@@ -27,58 +38,39 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const supabase = createClient()
-    const [user, setUser] = useState<User | null>(null)
+    const [user, setUser] = useState<AuthUser | null>(null)
     const [profile, setProfile] = useState<Profile | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        const fetchInitialSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            const currentUser = session?.user || null
-            setUser(currentUser)
-            updateProfileState(currentUser)
-            setLoading(false)
-        }
-
-        fetchInitialSession()
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            const currentUser = session?.user || null
-            setUser(currentUser)
-            updateProfileState(currentUser)
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser) {
+                const authUser = firebaseUser as AuthUser
+                authUser.id = firebaseUser.uid
+                setUser(authUser)
+                setProfile({
+                    id: firebaseUser.uid,
+                    full_name: firebaseUser.displayName,
+                    phone: null,
+                    avatar_url: firebaseUser.photoURL,
+                    created_at: firebaseUser.metadata.creationTime || new Date().toISOString()
+                })
+            } else {
+                setUser(null)
+                setProfile(null)
+            }
             setLoading(false)
         })
 
-        return () => subscription.unsubscribe()
-    }, [supabase.auth])
-
-    const updateProfileState = (currentUser: User | null) => {
-        if (currentUser) {
-            setProfile({
-                id: currentUser.id,
-                full_name: currentUser.user_metadata?.full_name || null,
-                phone: currentUser.phone || null,
-                avatar_url: currentUser.user_metadata?.avatar_url || null,
-                created_at: currentUser.created_at || new Date().toISOString()
-            })
-        } else {
-            setProfile(null)
-        }
-    }
+        return () => unsubscribe()
+    }, [])
 
     const signUp = async (email: string, password: string, fullName: string) => {
         try {
-            const { error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        full_name: fullName,
-                    }
-                }
-            })
-            if (error) throw error
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+            if (userCredential.user) {
+                await updateProfile(userCredential.user, { displayName: fullName })
+            }
             return { error: null }
         } catch (error: any) {
             return { error: new Error(error.message || "Failed to sign up") }
@@ -87,11 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signIn = async (email: string, password: string) => {
         try {
-            const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            })
-            if (error) throw error
+            await signInWithEmailAndPassword(auth, email, password)
             return { error: null }
         } catch (error: any) {
             return { error: new Error(error.message || "Failed to sign in") }
@@ -100,10 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signInWithGoogle = async () => {
         try {
-            const { error } = await supabase.auth.signInWithOAuth({
-                provider: 'google',
-            })
-            if (error) throw error
+            const provider = new GoogleAuthProvider()
+            await signInWithPopup(auth, provider)
             return { error: null }
         } catch (error: any) {
             return { error: new Error(error.message || "Failed to sign in with Google") }
@@ -112,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const signOut = async () => {
         try {
-            await supabase.auth.signOut()
+            await firebaseSignOut(auth)
             setUser(null)
             setProfile(null)
         } catch (error) {
@@ -120,18 +106,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }
 
-    const updateProfile = async (updates: Partial<Profile>) => {
+    const updateProfileFn = async (updates: Partial<Profile>) => {
         if (!user) return { error: new Error("Not authenticated") }
         
         try {
-            const { error } = await supabase.auth.updateUser({
-                data: {
-                    full_name: updates.full_name !== undefined ? updates.full_name : user.user_metadata?.full_name,
-                    avatar_url: updates.avatar_url !== undefined ? updates.avatar_url : user.user_metadata?.avatar_url,
-                }
-            })
-            if (error) throw error
-            
+            if (updates.full_name && updates.full_name !== user.displayName) {
+                await updateProfile(user, { displayName: updates.full_name })
+            }
             setProfile(prev => prev ? { ...prev, ...updates } : null)
             return { error: null }
         } catch (error: any) {
@@ -148,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             signIn,
             signInWithGoogle,
             signOut,
-            updateProfile
+            updateProfile: updateProfileFn
         }}>
             {children}
         </AuthContext.Provider>

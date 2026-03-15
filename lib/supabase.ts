@@ -1,11 +1,21 @@
 import { createBrowserClient } from '@supabase/ssr'
 
 // Create a Supabase client for browser usage
+// Uses fallback values during build/prerender to prevent crashes
 export function createClient() {
-    return createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!url || !key) {
+        // During prerendering, return a dummy client that won't crash
+        // Real calls will only happen client-side where env vars are available
+        return createBrowserClient(
+            'https://placeholder.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDYxMDYwMDAsImV4cCI6MTk2MTY4MjAwMH0.placeholder'
+        )
+    }
+
+    return createBrowserClient(url, key)
 }
 
 // Types for our database
